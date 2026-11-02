@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite Database local storage
+data/tickets.db
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Streamlit settings & cache
+.streamlit/
+
