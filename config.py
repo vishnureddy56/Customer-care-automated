@@ -1,72 +1,38 @@
 """
 Configuration and constants for SmartSupport AI.
+NO streamlit imports here — config is a pure Python module.
 """
 
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env if present
+# Load .env file (local development)
 load_dotenv()
 
-# Base directories
+# ── Directories ────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "tickets.db"
 
-# ---------------------------------------------------------------------------
-# API KEY LOADING — 3-layer priority:
-#   1. Streamlit Cloud st.secrets (production cloud deployment)
-#   2. .env file / OS environment variable (local development)
-#   3. Empty → rule-based fallback activates automatically
-# ---------------------------------------------------------------------------
-_PLACEHOLDER_STRINGS = {
-    "your_api_key_here",
-    "your_actual_api_key_here",
-    "paste_your_key_here",
-    "your-api-key",
-    "",
+# ── API Key (env-only; st.secrets is read in app.py) ───────
+_PLACEHOLDERS = {
+    "", "your_api_key_here", "your_actual_api_key_here",
+    "paste_your_key_here", "your-api-key",
 }
 
-def _load_api_key() -> str:
-    """Loads Gemini API key from Streamlit secrets or environment variables."""
-    # Priority 1: Streamlit Cloud st.secrets
-    try:
-        import streamlit as st
-        key = st.secrets.get("GEMINI_API_KEY", "").strip()
-        if key and key.lower() not in _PLACEHOLDER_STRINGS:
-            return key
-    except Exception:
-        pass
-
-    # Priority 2: .env file / OS environment variable
-    key = os.getenv("GEMINI_API_KEY", "").strip()
-    if key and key.lower() not in _PLACEHOLDER_STRINGS:
-        return key
-
-    # Priority 3: Legacy alias
-    key = os.getenv("GOOGLE_API_KEY", "").strip()
-    if key and key.lower() not in _PLACEHOLDER_STRINGS:
-        return key
-
+def _env_key() -> str:
+    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        val = os.getenv(var, "").strip()
+        if val and val.lower() not in _PLACEHOLDERS:
+            return val
     return ""
 
+GEMINI_API_KEY      = _env_key()
+API_KEY_IS_SET      = bool(GEMINI_API_KEY)
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 
-def _load_model() -> str:
-    try:
-        import streamlit as st
-        m = st.secrets.get("GEMINI_MODEL", "").strip()
-        if m:
-            return m
-    except Exception:
-        pass
-    return os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
-
-
-GEMINI_API_KEY = _load_api_key()
-API_KEY_IS_SET = bool(GEMINI_API_KEY)
-DEFAULT_GEMINI_MODEL = _load_model()
 FALLBACK_MODEL_LIST = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
@@ -74,7 +40,7 @@ FALLBACK_MODEL_LIST = [
     "gemini-1.5-pro",
 ]
 
-# Business Taxonomy - Categories
+# ── Business Taxonomy ──────────────────────────────────────
 CATEGORIES = [
     "General Inquiry",
     "Billing Issue",
@@ -83,15 +49,8 @@ CATEGORIES = [
     "Service Request",
 ]
 
-# Business Taxonomy - Priorities
-PRIORITIES = [
-    "Critical",
-    "High",
-    "Medium",
-    "Low",
-]
+PRIORITIES = ["Critical", "High", "Medium", "Low"]
 
-# Business Taxonomy - Departments
 DEPARTMENTS = [
     "Customer Service",
     "Billing Support",
@@ -100,50 +59,33 @@ DEPARTMENTS = [
     "Service Operations",
 ]
 
-# Sentiments
-SENTIMENTS = [
-    "Positive",
-    "Neutral",
-    "Negative",
-]
+SENTIMENTS     = ["Positive", "Neutral", "Negative"]
+TICKET_STATUSES = ["Open", "In Progress", "Resolved"]
+REQUEST_SOURCES = ["Email", "Chat"]
 
-# Ticket Statuses
-TICKET_STATUSES = [
-    "Open",
-    "In Progress",
-    "Resolved",
-]
-
-# Sources
-REQUEST_SOURCES = [
-    "Email",
-    "Chat",
-]
-
-# Color Palette for SaaS UI
+# ── Colour Palette ─────────────────────────────────────────
 PRIORITY_COLORS = {
-    "Critical": "#DC2626",  # Red
-    "High": "#EA580C",      # Orange
-    "Medium": "#D97706",    # Amber/Yellow
-    "Low": "#16A34A",       # Green
+    "Critical": "#DC2626",
+    "High":     "#EA580C",
+    "Medium":   "#D97706",
+    "Low":      "#16A34A",
 }
 
 PRIORITY_BG_COLORS = {
     "Critical": "#FEE2E2",
-    "High": "#FFEDD5",
-    "Medium": "#FEF3C7",
-    "Low": "#DCFCE7",
+    "High":     "#FFEDD5",
+    "Medium":   "#FEF3C7",
+    "Low":      "#DCFCE7",
 }
 
 STATUS_COLORS = {
-    "Open": "#2563EB",        # Blue
-    "In Progress": "#D97706", # Amber
-    "Resolved": "#16A34A",    # Green
+    "Open":        "#2563EB",
+    "In Progress": "#D97706",
+    "Resolved":    "#16A34A",
 }
 
 SENTIMENT_COLORS = {
     "Positive": "#16A34A",
-    "Neutral": "#64748B",
+    "Neutral":  "#64748B",
     "Negative": "#DC2626",
 }
-

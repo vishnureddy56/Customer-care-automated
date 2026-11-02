@@ -20,7 +20,6 @@ from config import (
     STATUS_COLORS,
     SENTIMENT_COLORS,
     GEMINI_API_KEY,
-    API_KEY_IS_SET,
     DEFAULT_GEMINI_MODEL,
     FALLBACK_MODEL_LIST,
 )
@@ -176,16 +175,23 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### ⚙️ AI Engine Settings")
 
-    # API Key Handling
+    # API Key — read from st.secrets (Streamlit Cloud) OR config (.env)
+    _secrets_key = ""
+    try:
+        _secrets_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+    except Exception:
+        pass
+    _default_key = _secrets_key or GEMINI_API_KEY
+
     custom_api_key = st.text_input(
         "Gemini API Key",
-        value=GEMINI_API_KEY,
+        value=_default_key,
         type="password",
         help="Paste your key from https://aistudio.google.com/app/apikey — or add it to the .env file.",
         placeholder="AIza...",
     )
 
-    active_api_key = custom_api_key.strip() if custom_api_key else GEMINI_API_KEY
+    active_api_key = custom_api_key.strip() if custom_api_key.strip() else _default_key
 
     selected_model = st.selectbox(
         "Model Selection",
@@ -194,14 +200,14 @@ with st.sidebar:
         help="Configurable Gemini model for JSON triage analysis.",
     )
 
-    # API Connection Indicator
+    # Status indicator
     if active_api_key:
         st.success("🟢 Gemini API Key Active")
     else:
         st.warning("🟡 No API Key — Fallback Mode Active")
         st.caption(
-            "Add your free key at [aistudio.google.com](https://aistudio.google.com/app/apikey) "
-            "then paste it above **or** add it to your `.env` file."
+            "Get a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey) "
+            "and paste it above or add it to your `.env` file."
         )
 
     st.markdown("---")
