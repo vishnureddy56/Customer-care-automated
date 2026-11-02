@@ -15,9 +15,31 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "tickets.db"
 
-# API Configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# ---------------------------------------------------------------------------
+# API KEY LOADING
+# Priority order:
+#   1. .env file in project root (GEMINI_API_KEY)
+#   2. System / shell environment variable (GEMINI_API_KEY)
+#   3. Legacy alias (GOOGLE_API_KEY)
+#   4. Empty string → fallback heuristic classifier activates automatically
+# ---------------------------------------------------------------------------
+_raw_key = os.getenv("GEMINI_API_KEY", "").strip()
+
+# Reject placeholder values left in .env by mistake
+_PLACEHOLDER_STRINGS = {
+    "your_api_key_here",
+    "your_actual_api_key_here",
+    "paste_your_key_here",
+    "your-api-key",
+    "",
+}
+if _raw_key.lower() in _PLACEHOLDER_STRINGS:
+    _raw_key = os.getenv("GOOGLE_API_KEY", "").strip()
+
+GEMINI_API_KEY = _raw_key
+API_KEY_IS_SET = bool(GEMINI_API_KEY)
+
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 FALLBACK_MODEL_LIST = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",

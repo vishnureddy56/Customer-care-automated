@@ -20,6 +20,7 @@ from config import (
     STATUS_COLORS,
     SENTIMENT_COLORS,
     GEMINI_API_KEY,
+    API_KEY_IS_SET,
     DEFAULT_GEMINI_MODEL,
     FALLBACK_MODEL_LIST,
 )
@@ -180,7 +181,8 @@ with st.sidebar:
         "Gemini API Key",
         value=GEMINI_API_KEY,
         type="password",
-        help="Optional: If left blank or if quota is exceeded, SmartSupport AI automatically switches to the clearly labelled heuristic fallback mode.",
+        help="Paste your key from https://aistudio.google.com/app/apikey — or add it to the .env file.",
+        placeholder="AIza...",
     )
 
     active_api_key = custom_api_key.strip() if custom_api_key else GEMINI_API_KEY
@@ -196,7 +198,11 @@ with st.sidebar:
     if active_api_key:
         st.success("🟢 Gemini API Key Active")
     else:
-        st.info("🟡 Fallback Classifier Mode (No API key)")
+        st.warning("🟡 No API Key — Fallback Mode Active")
+        st.caption(
+            "Add your free key at [aistudio.google.com](https://aistudio.google.com/app/apikey) "
+            "then paste it above **or** add it to your `.env` file."
+        )
 
     st.markdown("---")
     st.markdown("#### 🧪 Demo Data Controls")
