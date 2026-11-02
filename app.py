@@ -34,7 +34,7 @@ from database import (
     has_demo_data,
     insert_demo_tickets,
 )
-from ai_engine import analyze_ticket_with_gemini, generate_chatbot_response
+from ai_engine import analyze_ticket_with_gemini
 from ticket_manager import (
     generate_ticket_id,
     evaluate_hybrid_rules,
@@ -165,7 +165,6 @@ with st.sidebar:
         "Navigation",
         [
             "📊 Overview Dashboard",
-            "💬 Customer Support Chat",
             "➕ Create New Ticket",
             "📋 Manage Tickets",
             "💡 AI Insights",
@@ -234,6 +233,39 @@ with st.sidebar:
                     deleted += 1
             st.warning(f"Cleared {deleted} tickets.")
             st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### 📥 Instant Download")
+
+    report_path = "C:\\Users\\vishn\\OneDrive\\SmartSupport-AI-Technical-Report.zip"
+    full_zip_path = "C:\\Users\\vishn\\OneDrive\\SmartSupport-AI.zip"
+
+    try:
+        with open(report_path, "rb") as f:
+            report_bytes = f.read()
+        st.download_button(
+            label="📄 Download Technical Report (.zip)",
+            data=report_bytes,
+            file_name="SmartSupport-AI-Technical-Report.zip",
+            mime="application/zip",
+            use_container_width=True,
+            type="primary",
+        )
+    except Exception:
+        pass
+
+    try:
+        with open(full_zip_path, "rb") as f:
+            full_zip_bytes = f.read()
+        st.download_button(
+            label="📦 Download Full Project (.zip)",
+            data=full_zip_bytes,
+            file_name="SmartSupport-AI.zip",
+            mime="application/zip",
+            use_container_width=True,
+        )
+    except Exception:
+        pass
 
 
 # ==============================================================================
@@ -439,157 +471,6 @@ if nav_selection == "📊 Overview Dashboard":
             use_container_width=True,
             hide_index=True,
         )
-
-
-# ==============================================================================
-# SECTION: CUSTOMER SUPPORT CHATBOT (AI INTERACTIVE RESOLUTION & AUTO-ESCALATION)
-# ==============================================================================
-elif nav_selection == "💬 Customer Support Chat":
-    st.markdown("<div class='section-header'>💬 Live Customer Support Assistant</div>", unsafe_allow_html=True)
-    st.caption("Interact with SmartBot 24/7. Get instant answers to questions, or have issues automatically triaged into official support tickets.")
-
-    # Customer profile options
-    with st.expander("👤 Customer Profile Settings (Used when creating official tickets)", expanded=False):
-        col_cp1, col_cp2 = st.columns(2)
-        with col_cp1:
-            chat_cust_name = st.text_input("Your Name", value=st.session_state.get("chat_user_name", "Alex Rivera"))
-            st.session_state["chat_user_name"] = chat_cust_name
-        with col_cp2:
-            chat_cust_email = st.text_input("Your Email", value=st.session_state.get("chat_user_email", "alex.rivera@example.com"))
-            st.session_state["chat_user_email"] = chat_cust_email
-
-    # Initialize chat history
-    if "chat_messages" not in st.session_state:
-        st.session_state.chat_messages = [
-            {
-                "role": "assistant",
-                "content": "Hello! 👋 I'm **SmartBot**, your customer support assistant. How can I help you today? Ask a question or report an issue and I'll assist or route you to the right department!",
-                "ticket_info": None,
-            }
-        ]
-
-    # Quick Prompt Pills
-    st.markdown("##### ⚡ Quick Prompts")
-    q_col1, q_col2, q_col3, q_col4, q_col5 = st.columns(5)
-    quick_input = None
-    with q_col1:
-        if st.button("💳 Charged Twice", use_container_width=True):
-            quick_input = "I was charged twice for my monthly subscription. Please help me get a refund."
-    with q_col2:
-        if st.button("🚨 Overheating Smoke", use_container_width=True):
-            quick_input = "My product is overheating and has started producing smoke!"
-    with q_col3:
-        if st.button("🌐 Service Outage", use_container_width=True):
-            quick_input = "Your entire service is down and none of our employees can access it."
-    with q_col4:
-        if st.button("🔐 Reset Password", use_container_width=True):
-            quick_input = "How can I change or reset my account password?"
-    with q_col5:
-        if st.button("🛠️ App Crashes", use_container_width=True):
-            quick_input = "The application crashes whenever I open it."
-
-    # Display Chat History
-    for msg in st.session_state.chat_messages:
-        with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
-            st.markdown(msg["content"])
-            if msg.get("ticket_info"):
-                ti = msg["ticket_info"]
-                st.markdown(
-                    f"""
-                    <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 4px solid #2563EB; border-radius: 8px; padding: 12px 16px; margin-top: 10px;">
-                        <div style="font-size: 0.85rem; font-weight: 700; color: #1E293B;">
-                            🎫 Official Support Ticket Logged: <span style="color: #2563EB;">{ti['ticket_id']}</span>
-                        </div>
-                        <div style="font-size: 0.8rem; color: #64748B; margin-top: 4px;">
-                            <b>Category:</b> {ti['category']} &nbsp;|&nbsp; 
-                            <b>Priority:</b> <span class="badge badge-{ti['priority'].lower()}">{ti['priority']}</span> &nbsp;|&nbsp; 
-                            <b>Routing:</b> {ti['assigned_team']}
-                        </div>
-                        <div style="font-size: 0.8rem; color: #334155; margin-top: 6px;">
-                            <b>Next Step:</b> {ti['recommended_action']}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                if ti.get("rule_warnings"):
-                    for rw in ti["rule_warnings"]:
-                        st.error(rw)
-
-    # Chat Input handler
-    user_prompt = st.chat_input("Type your question or message...")
-    active_prompt = quick_input or user_prompt
-
-    if active_prompt:
-        # Append User Message
-        st.session_state.chat_messages.append({"role": "user", "content": active_prompt})
-
-        # Process with SmartBot
-        with st.spinner("SmartBot is thinking and reviewing issue..."):
-            bot_res = generate_chatbot_response(
-                user_message=active_prompt,
-                chat_history=st.session_state.chat_messages,
-                api_key=active_api_key,
-                model_name=selected_model,
-            )
-
-            ticket_meta = None
-            if bot_res.get("should_create_ticket") and bot_res.get("triage_data"):
-                td = bot_res["triage_data"]
-                rule_warns = evaluate_hybrid_rules(active_prompt, td)
-                new_id = generate_ticket_id()
-                now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
-                ticket_payload = {
-                    "ticket_id": new_id,
-                    "customer_name": st.session_state.get("chat_user_name", "Alex Rivera"),
-                    "customer_email": st.session_state.get("chat_user_email", "alex.rivera@example.com"),
-                    "source": "Chat",
-                    "message": active_prompt,
-                    "category": td["category"],
-                    "priority": td["priority"],
-                    "sentiment": td.get("sentiment", "Neutral"),
-                    "assigned_team": td["assigned_team"],
-                    "summary": td["summary"],
-                    "recommended_action": td["recommended_action"],
-                    "confidence": td.get("confidence", 85),
-                    "status": "Open",
-                    "is_demo": 0,
-                    "created_at": now_str,
-                    "updated_at": now_str,
-                }
-                insert_ticket(ticket_payload)
-
-                ticket_meta = {
-                    "ticket_id": new_id,
-                    "category": td["category"],
-                    "priority": td["priority"],
-                    "assigned_team": td["assigned_team"],
-                    "recommended_action": td["recommended_action"],
-                    "rule_warnings": rule_warns,
-                }
-
-            # Append Assistant Message
-            st.session_state.chat_messages.append({
-                "role": "assistant",
-                "content": bot_res["reply_text"],
-                "ticket_info": ticket_meta,
-            })
-
-            st.rerun()
-
-    # Reset Chat Button
-    if len(st.session_state.chat_messages) > 1:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🗑️ Clear Chat History"):
-            st.session_state.chat_messages = [
-                {
-                    "role": "assistant",
-                    "content": "Hello! 👋 I'm **SmartBot**, your customer support assistant. How can I help you today? Ask a question or report an issue and I'll assist or route you to the right department!",
-                    "ticket_info": None,
-                }
-            ]
-            st.rerun()
 
 
 # ==============================================================================
