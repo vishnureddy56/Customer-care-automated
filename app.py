@@ -448,6 +448,8 @@ elif nav_selection == "➕ Create New Ticket":
     st.caption("Input customer requests to receive automated AI classification, priority detection, and team routing.")
 
     # State initialization for current triage review
+    if "latest_created_ticket" not in st.session_state:
+        st.session_state.latest_created_ticket = None
     if "triage_result" not in st.session_state:
         st.session_state.triage_result = None
     if "current_input_data" not in st.session_state:
@@ -495,7 +497,6 @@ elif nav_selection == "➕ Create New Ticket":
         },
     }
 
-    selected_template = None
     for idx, (label, data) in enumerate(template_data.items()):
         with demo_cols[idx]:
             if st.button(label, use_container_width=True):
@@ -503,6 +504,7 @@ elif nav_selection == "➕ Create New Ticket":
                 st.session_state["form_email"] = data["email"]
                 st.session_state["form_source"] = data["source"]
                 st.session_state["form_message"] = data["message"]
+                st.session_state.latest_created_ticket = None
                 st.session_state.triage_result = None
 
     # Input Form
@@ -540,13 +542,25 @@ elif nav_selection == "➕ Create New Ticket":
             placeholder="Paste customer support inquiry, error log, or chat transcript...",
         )
 
-        analyze_submitted = st.form_submit_button("🤖 Analyze with AI", use_container_width=True, type="primary")
+        col_sub1, col_sub2 = st.columns([3, 1])
+        with col_sub1:
+            auto_approve = st.checkbox(
+                "⚡ Auto-Approve & Save to Database Immediately (No manual wait)",
+                value=True,
+                help="When enabled, the ticket is classified by AI and immediately created in SQLite without waiting for human approval.",
+            )
 
-    if analyze_submitted:
+        submit_btn = st.form_submit_button(
+            "🚀 Analyze & Auto-Approve Ticket" if auto_approve else "🔍 Analyze with AI",
+            use_container_width=True,
+            type="primary",
+        )
+
+    if submit_btn:
         if not customer_message.strip():
-            st.error("Please enter a customer message before analyzing.")
+            st.error("Please enter a customer message before submitting.")
         else:
-            with st.spinner("Analyzing customer message and evaluating business rules..."):
+            with st.spinner("Analyzing with AI and processing triage rules..."):
                 triage_res = analyze_ticket_with_gemini(
                     message=customer_message,
                     api_key=active_api_key,
@@ -555,95 +569,148 @@ elif nav_selection == "➕ Create New Ticket":
                 rule_warnings = evaluate_hybrid_rules(customer_message, triage_res)
                 triage_res["rule_warnings"] = rule_warnings
 
-                # Store in session state for review form
-                st.session_state.triage_result = triage_res
-                st.session_state.current_input_data = {
-                    "customer_name": customer_name,
-                    "customer_email": customer_email,
-                    "source": request_source,
-                    "message": customer_message,
-                }
+                now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+                if auto_approve:
+                    # ── AUTOMATIC APPROVAL WORKFLOW ─────────────────────────
+                    new_id = generate_ticket_id()
+                    ticket_record = {
+                        "ticket_id": new_id,
+                        "customer_name": customer_name,
+                        "customer_email": customer_email,
+                        "source": request_source,
+                        "message": customer_message,
+                        "category": triage_res["category"],
+                        "priority": triage_res["priority"],
+                        "sentiment": triage_res.get("sentiment", "Neutral"),
+                        "assigned_team": triage_res["assigned_team"],
+                        "summary": triage_res["summary"],
+                        "recommended_action": triage_res["recommended_action"],
+                        "confidence": triage_res.get("confidence", 85),
+                        "status": "Open",
+                        "is_demo": 0,
+                        "created_at": now_str,
+                        "updated_at": now_str,
+                    }
+                    insert_ticket(ticket_record)
+
+                    # Store as latest created ticket for instant confirmation display
+                    st.session_state.latest_created_ticket = ticket_record
+                    st.session_state.latest_created_ticket["mode_label"] = triage_res.get("mode_label")
+                    st.session_state.latest_created_ticket["is_fallback"] = triage_res.get("is_fallback")
+                    st.session_state.latest_created_ticket["fallback_reason"] = triage_res.get("fallback_reason")
+                    st.session_state.latest_created_ticket["rule_warnings"] = rule_warnings
+                    st.session_state.triage_result = None
+                    st.balloons()
+                    st.rerun()
+
+                else:
+                    # ── MANUAL REVIEW WORKFLOW (If user toggled auto-approve OFF) ──
+                    st.session_state.triage_result = triage_res
+                    st.session_state.current_input_data = {
+                        "customer_name": customer_name,
+                        "customer_email": customer_email,
+                        "source": request_source,
+                        "message": customer_message,
+                    }
+                    st.session_state.latest_created_ticket = None
 
     # ==============================================================================
-    # HUMAN REVIEW AND APPROVAL CARD (FEATURE 4 & HYBRID RULES)
+    # DISPLAY 1: AUTO-APPROVED & CREATED TICKET CONFIRMATION
     # ==============================================================================
-    if st.session_state.triage_result:
+    if st.session_state.get("latest_created_ticket"):
+        lt = st.session_state.latest_created_ticket
+        st.markdown("<hr style='margin: 25px 0;'>", unsafe_allow_html=True)
+        st.success(
+            f"### 🎉 Ticket **{lt['ticket_id']}** Automatically Approved & Created!\n"
+            f"Assigned directly to **{lt['assigned_team']}** with status **Open**."
+        )
+
+        # Warnings if triggered
+        if lt.get("rule_warnings"):
+            for w in lt["rule_warnings"]:
+                st.error(w)
+
+        # AI Status pill
+        if lt.get("is_fallback"):
+            st.info(f"⚙️ {lt.get('mode_label', 'Rule-based fallback mode')}")
+        else:
+            st.success(f"🟢 {lt.get('mode_label', 'Analyzed via Gemini AI')}")
+
+        with st.container():
+            c_info1, c_info2, c_info3, c_info4 = st.columns(4)
+            with c_info1:
+                st.metric("Category", lt["category"])
+            with c_info2:
+                st.metric("Priority", lt["priority"])
+            with c_info3:
+                st.metric("Department", lt["assigned_team"])
+            with c_info4:
+                st.metric("Confidence", f"{lt['confidence']}%")
+
+            st.markdown(f"**Customer:** {lt['customer_name']} ({lt['source']})")
+            st.text_area("Customer Message", value=lt["message"], height=80, disabled=True)
+            st.info(f"**AI Summary:** {lt['summary']}\n\n**Recommended Action:** {lt['recommended_action']}")
+
+        col_c_btn1, col_c_btn2 = st.columns([1, 1])
+        with col_c_btn1:
+            if st.button("➕ Create Another Ticket", use_container_width=True):
+                st.session_state.latest_created_ticket = None
+                st.rerun()
+
+    # ==============================================================================
+    # DISPLAY 2: MANUAL REVIEW CARD (ONLY WHEN AUTO-APPROVE WAS UNCHECKED)
+    # ==============================================================================
+    elif st.session_state.triage_result:
         triage = st.session_state.triage_result
         input_data = st.session_state.current_input_data
 
         st.markdown("<hr style='margin: 25px 0;'>", unsafe_allow_html=True)
-        st.markdown("<div class='section-header'>🕵️ Human Review & Approval Gate</div>", unsafe_allow_html=True)
-        st.caption("AI-assisted recommendation. Human support agents retain full control to adjust categories and priority.")
+        st.markdown("<div class='section-header'>🕵️ Manual Review & Approval Gate</div>", unsafe_allow_html=True)
+        st.caption("AI-assisted recommendation. Adjust fields and click Approve below.")
 
-        # Status mode label
         if triage.get("is_fallback"):
-            st.warning(
-                f"⚠️ **{triage.get('mode_label', 'Rule-based fallback mode – AI service unavailable.')}**\n\n"
-                f"*Reason: {triage.get('fallback_reason', 'External API inactive.')}*"
-            )
+            st.warning(f"⚠️ {triage.get('mode_label', 'Rule-based fallback mode')}")
         else:
-            st.success(f"🟢 **{triage.get('mode_label', 'Analyzed via Gemini AI')}**")
+            st.success(f"🟢 {triage.get('mode_label', 'Analyzed via Gemini AI')}")
 
-        # Hybrid Rule Warnings
         if triage.get("rule_warnings"):
             for w in triage["rule_warnings"]:
                 st.error(w)
 
-        # Review & Edit Container
         with st.container():
             col_rev1, col_rev2 = st.columns([1, 1])
 
             with col_rev1:
                 st.markdown("##### 📄 Original Customer Context")
                 st.markdown(f"**Customer:** {input_data.get('customer_name')} ({input_data.get('source')})")
-                if input_data.get("customer_email"):
-                    st.markdown(f"**Email:** {input_data.get('customer_email')}")
                 st.text_area("Customer Message", value=input_data.get("message"), height=90, disabled=True)
-
-                st.markdown("##### 🔍 AI Diagnostic Telemetry")
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
                     st.metric("Sentiment", triage.get("sentiment", "Neutral"))
                 with col_m2:
-                    conf = triage.get("confidence", 85)
-                    st.metric("AI Confidence", f"{conf}%")
+                    st.metric("AI Confidence", f"{triage.get('confidence', 85)}%")
 
             with col_rev2:
                 st.markdown("##### ✏️ Agent Decision & Adjustments")
-
-                cat_idx = (
-                    CATEGORIES.index(triage.get("category"))
-                    if triage.get("category") in CATEGORIES
-                    else 0
-                )
+                cat_idx = CATEGORIES.index(triage.get("category")) if triage.get("category") in CATEGORIES else 0
                 approved_category = st.selectbox("Category", options=CATEGORIES, index=cat_idx)
 
-                pri_idx = (
-                    PRIORITIES.index(triage.get("priority"))
-                    if triage.get("priority") in PRIORITIES
-                    else 2
-                )
+                pri_idx = PRIORITIES.index(triage.get("priority")) if triage.get("priority") in PRIORITIES else 2
                 approved_priority = st.selectbox("Priority", options=PRIORITIES, index=pri_idx)
 
-                dept_idx = (
-                    DEPARTMENTS.index(triage.get("assigned_team"))
-                    if triage.get("assigned_team") in DEPARTMENTS
-                    else 0
-                )
+                dept_idx = DEPARTMENTS.index(triage.get("assigned_team")) if triage.get("assigned_team") in DEPARTMENTS else 0
                 approved_team = st.selectbox("Assigned Department", options=DEPARTMENTS, index=dept_idx)
 
                 approved_summary = st.text_input("Concise Issue Summary", value=triage.get("summary", ""))
                 approved_action = st.text_input("Recommended Action", value=triage.get("recommended_action", ""))
 
-            # Final Decision Actions
             st.markdown("<br>", unsafe_allow_html=True)
             col_act1, col_act2 = st.columns([3, 1])
-
             with col_act1:
                 if st.button("✅ Approve and Create Ticket", type="primary", use_container_width=True):
                     new_id = generate_ticket_id()
                     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
                     ticket_record = {
                         "ticket_id": new_id,
                         "customer_name": input_data["customer_name"],
@@ -662,13 +729,12 @@ elif nav_selection == "➕ Create New Ticket":
                         "created_at": now_str,
                         "updated_at": now_str,
                     }
-
                     insert_ticket(ticket_record)
                     st.success(f"🎉 Ticket **{new_id}** created and assigned to **{approved_team}**!")
                     st.balloons()
-                    # Reset state
                     st.session_state.triage_result = None
                     st.session_state.current_input_data = {}
+                    st.rerun()
 
             with col_act2:
                 if st.button("❌ Discard", use_container_width=True):
