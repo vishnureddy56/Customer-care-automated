@@ -16,16 +16,11 @@ DATA_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "tickets.db"
 
 # ---------------------------------------------------------------------------
-# API KEY LOADING
-# Priority order:
-#   1. .env file in project root (GEMINI_API_KEY)
-#   2. System / shell environment variable (GEMINI_API_KEY)
-#   3. Legacy alias (GOOGLE_API_KEY)
-#   4. Empty string → fallback heuristic classifier activates automatically
+# API KEY LOADING — 3-layer priority:
+#   1. Streamlit Cloud st.secrets (production cloud deployment)
+#   2. .env file / OS environment variable (local development)
+#   3. Empty → rule-based fallback activates automatically
 # ---------------------------------------------------------------------------
-_raw_key = os.getenv("GEMINI_API_KEY", "").strip()
-
-# Reject placeholder values left in .env by mistake
 _PLACEHOLDER_STRINGS = {
     "your_api_key_here",
     "your_actual_api_key_here",
@@ -33,13 +28,45 @@ _PLACEHOLDER_STRINGS = {
     "your-api-key",
     "",
 }
-if _raw_key.lower() in _PLACEHOLDER_STRINGS:
-    _raw_key = os.getenv("GOOGLE_API_KEY", "").strip()
 
-GEMINI_API_KEY = _raw_key
+def _load_api_key() -> str:
+    """Loads Gemini API key from Streamlit secrets or environment variables."""
+    # Priority 1: Streamlit Cloud st.secrets
+    try:
+        import streamlit as st
+        key = st.secrets.get("GEMINI_API_KEY", "").strip()
+        if key and key.lower() not in _PLACEHOLDER_STRINGS:
+            return key
+    except Exception:
+        pass
+
+    # Priority 2: .env file / OS environment variable
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    if key and key.lower() not in _PLACEHOLDER_STRINGS:
+        return key
+
+    # Priority 3: Legacy alias
+    key = os.getenv("GOOGLE_API_KEY", "").strip()
+    if key and key.lower() not in _PLACEHOLDER_STRINGS:
+        return key
+
+    return ""
+
+
+def _load_model() -> str:
+    try:
+        import streamlit as st
+        m = st.secrets.get("GEMINI_MODEL", "").strip()
+        if m:
+            return m
+    except Exception:
+        pass
+    return os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+
+
+GEMINI_API_KEY = _load_api_key()
 API_KEY_IS_SET = bool(GEMINI_API_KEY)
-
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+DEFAULT_GEMINI_MODEL = _load_model()
 FALLBACK_MODEL_LIST = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",

@@ -1,5 +1,8 @@
-# Environment variables
+# Environment variables — NEVER commit real keys
 .env
+
+# Streamlit secrets — NEVER commit (add keys via Streamlit Cloud UI)
+.streamlit/secrets.toml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -13,7 +16,4 @@ data/tickets.db
 .venv/
 venv/
 ENV/
-
-# Streamlit settings & cache
-.streamlit/
 
